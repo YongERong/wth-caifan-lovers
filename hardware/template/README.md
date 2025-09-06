@@ -1,0 +1,7 @@
+# [name]
+
+## Purpose
+
+## Installation
+
+## FAQs
