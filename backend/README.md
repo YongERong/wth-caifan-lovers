@@ -93,7 +93,7 @@
 - 8.6. Profile verification status tracking
 
 # System Architecture
-![[system arch.png]]
+![System Design](system%20arch.png)
 
 # FastAPI Endpoints
 
