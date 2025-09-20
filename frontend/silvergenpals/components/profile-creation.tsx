@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { User, Save, X } from "lucide-react";
+import { User, Save, X, Mic } from "lucide-react";
+import VoiceInput from "@/components/voice-input";
 
 interface ProfileCreationProps {
   user: any;
@@ -18,6 +19,7 @@ export default function ProfileCreation({ user, onProfileCreated }: ProfileCreat
     email: user?.email || "",
     phone_number: "",
     date_of_birth: "",
+    age: "",
     gender: "",
     address_line1: "",
     address_line2: "",
@@ -56,6 +58,34 @@ export default function ProfileCreation({ user, onProfileCreated }: ProfileCreat
       }));
       setValue("");
     }
+  };
+
+  const handleVoiceTranscription = (text: string, fieldMappings: Record<string, string>) => {
+    console.log('Voice transcription:', text);
+    console.log('Field mappings:', fieldMappings);
+
+    // Update form data with extracted fields
+    setFormData(prev => {
+      const updated = { ...prev };
+
+      Object.entries(fieldMappings).forEach(([field, value]) => {
+        if (field === 'interests' || field === 'activity_preferences' || field === 'language_preferences') {
+          try {
+            const parsedArray = JSON.parse(value);
+            updated[field as keyof typeof updated] = parsedArray as never;
+          } catch (e) {
+            console.error('Error parsing array field:', field, value);
+          }
+        } else {
+          updated[field as keyof typeof updated] = value as never;
+        }
+      });
+
+      return updated;
+    });
+
+    // Show a success message
+    alert(`Voice input processed! Found: ${Object.keys(fieldMappings).join(', ')}`);
   };
 
   const removeFromArray = (field: string, valueToRemove: string) => {
@@ -117,17 +147,49 @@ export default function ProfileCreation({ user, onProfileCreated }: ProfileCreat
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-8">
-            <div className="flex items-center space-x-3">
-              <User className="h-8 w-8" />
-              <div>
-                <h1 className="text-3xl font-bold">Complete Your Profile</h1>
-                <p className="text-pink-100 mt-1">Help us personalize your experience and connect you with the right activities and buddies</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <User className="h-8 w-8" />
+                <div>
+                  <h1 className="text-3xl font-bold">Complete Your Profile</h1>
+                  <p className="text-pink-100 mt-1">Help us personalize your experience and connect you with the right activities and buddies</p>
+                </div>
+              </div>
+
+              {/* Voice Input */}
+              <div className="flex flex-col items-center space-y-2">
+                <VoiceInput
+                  onTranscription={handleVoiceTranscription}
+                  disabled={loading}
+                  className="text-white"
+                />
+                <div className="text-center">
+                  <p className="text-white text-sm font-medium">Voice Fill</p>
+                  <p className="text-pink-100 text-xs">Speak to auto-fill</p>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-8 space-y-8">
+            {/* Voice Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <Mic className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-blue-900">Voice Input Instructions</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Use the voice button above to automatically fill your profile. Try saying something like:
+                  </p>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    "My name is John Smith, I am 65 years old, I live at 123 Main Street, I enjoy reading and gardening,
+                    my emergency contact is Mary Smith, I speak English and Mandarin"
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Basic Information */}
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
@@ -183,6 +245,18 @@ export default function ProfileCreation({ user, onProfileCreated }: ProfileCreat
                     name="date_of_birth"
                     required
                     value={formData.date_of_birth}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
+                  <input
+                    type="number"
+                    name="age"
+                    min="1"
+                    max="120"
+                    value={formData.age}
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   />

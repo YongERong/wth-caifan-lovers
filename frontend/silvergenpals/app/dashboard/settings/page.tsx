@@ -1,14 +1,137 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard-layout";
 import { User, Bell, Shield, Accessibility, Globe, Heart, Save } from "lucide-react";
 
-export default async function SettingsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export default function SettingsPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    first_name: "",
+    last_name: "",
+    phone_number: "",
+    bio: "",
+    gender: "",
+    date_of_birth: "",
+    address_line1: "",
+    address_line2: "",
+    postal_code: "",
+    city: "",
+    country: "Singapore",
+    mobility_level: "",
+    interests: [] as string[],
+    activity_preferences: [] as string[],
+    language_preferences: [] as string[]
+  });
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    checkUserAndProfile();
+  }, []);
+
+  const checkUserAndProfile = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      if (!authUser) {
+        router.push("/auth/login");
+        return;
+      }
+
+      setUser(authUser);
+
+      // Fetch profile data
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id);
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+      } else if (profileData && profileData.length > 0) {
+        const userProfile = profileData[0];
+        setProfile(userProfile);
+
+        // Pre-populate form with existing profile data
+        setFormData({
+          first_name: userProfile.first_name || "",
+          last_name: userProfile.last_name || "",
+          phone_number: userProfile.phone_number || "",
+          bio: userProfile.bio || "",
+          gender: userProfile.gender || "",
+          date_of_birth: userProfile.date_of_birth || "",
+          address_line1: userProfile.address_line1 || "",
+          address_line2: userProfile.address_line2 || "",
+          postal_code: userProfile.postal_code || "",
+          city: userProfile.city || "",
+          country: userProfile.country || "Singapore",
+          mobility_level: userProfile.mobility_level || "",
+          interests: userProfile.interests || [],
+          activity_preferences: userProfile.activity_preferences || [],
+          language_preferences: userProfile.language_preferences || []
+        });
+      }
+    } catch (error) {
+      console.error('Error checking user and profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user || !profile) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(formData)
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        alert('Failed to save profile. Please try again.');
+      } else {
+        alert('Profile saved successfully!');
+        // Refresh profile data
+        checkUserAndProfile();
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
-    redirect("/auth/login");
+    return null;
   }
 
   return (
@@ -34,6 +157,9 @@ export default async function SettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                 <input
                   type="text"
+                  name="first_name"
+                  value={formData.first_name}
+                  onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="Enter your first name"
                 />
@@ -42,6 +168,9 @@ export default async function SettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                 <input
                   type="text"
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="Enter your last name"
                 />
@@ -50,7 +179,7 @@ export default async function SettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <input
                   type="email"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-gray-100 text-gray-500"
                   value={user.email || ''}
                   disabled
                 />
@@ -59,6 +188,9 @@ export default async function SettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                 <input
                   type="tel"
+                  name="phone_number"
+                  value={formData.phone_number}
+                  onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="Enter your phone number"
                 />
@@ -67,16 +199,136 @@ export default async function SettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
                 <textarea
                   rows={4}
+                  name="bio"
+                  value={formData.bio}
+                  onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   placeholder="Tell others about yourself..."
                 />
               </div>
+
+              {/* Additional Profile Fields */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                  <option value="prefer-not-to-say">Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
+                <input
+                  type="date"
+                  name="date_of_birth"
+                  value={formData.date_of_birth}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1</label>
+                <input
+                  type="text"
+                  name="address_line1"
+                  value={formData.address_line1}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  placeholder="Enter your address"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  placeholder="Enter your city"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Postal Code</label>
+                <input
+                  type="text"
+                  name="postal_code"
+                  value={formData.postal_code}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  placeholder="Enter postal code"
+                />
+              </div>
             </div>
+
+            {/* Mobility Level */}
             <div className="mt-6">
-              <button className="flex items-center px-6 py-3 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition-colors">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mobility Level</label>
+              <select
+                name="mobility_level"
+                value={formData.mobility_level}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              >
+                <option value="">Select mobility level</option>
+                <option value="high">High - Can participate in physically demanding activities</option>
+                <option value="moderate">Moderate - Can walk and participate in light activities</option>
+                <option value="low">Low - Limited mobility but can participate in seated activities</option>
+                <option value="wheelchair">Wheelchair user</option>
+              </select>
+            </div>
+
+            {/* Interests */}
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.interests.map((interest, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-pink-100 text-pink-800"
+                  >
+                    {interest}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          interests: prev.interests.filter((_, i) => i !== index)
+                        }));
+                      }}
+                      className="ml-2 text-pink-600 hover:text-pink-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="text-sm text-gray-500">
+                Current interests: {formData.interests.length > 0 ? formData.interests.join(', ') : 'None'}
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={handleSaveProfile}
+                disabled={saving || !profile}
+                className="flex items-center px-6 py-3 bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+              >
                 <Save className="mr-2 h-5 w-5" />
-                Save Profile
+                {saving ? 'Saving...' : 'Save Profile'}
               </button>
+              {!profile && (
+                <p className="mt-2 text-sm text-gray-500">
+                  Please complete your profile creation first before accessing settings.
+                </p>
+              )}
             </div>
           </div>
         </div>
