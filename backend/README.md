@@ -1,92 +1,96 @@
 # Requirements
 ### Authentication & Profile Management
 
-1.1. User should be able to sign up / login into their profile on the buddy platform 1.2. Users can create, view, and update their profiles with personal information including:
-- Basic details (name, email, phone, date of birth, gender)
-- Address information with Singapore as default country
-- Profile bio and profile image
-- Emergency contact information
-- Interests, mobility level, activity preferences, and language preferences (stored as JSONB)
+- 1.1. User should be able to sign up / login into their profile on the buddy platform 
+- 1.2. Users can create, view, and update their profiles with personal information including:
+	- Basic details (name, email, phone, date of birth, gender)
+	- Address information with Singapore as default country
+	- Profile bio and profile image
+	- Emergency contact information
+	- Interests, mobility level, activity preferences, and language preferences (stored as JSONB)
 
-1.3. Profile verification system to mark users as verified 
-1.4. User types should include regular users and staff accounts with different permissions 
-1.5. Users can view other users' profiles (read-only access to public profile information)
+- 1.3. Profile verification system to mark users as verified 
+- 1.4. User types should include regular users and staff accounts with different permissions 
+- 1.5. Users can view other users' profiles (read-only access to public profile information)
 
 ### Activities & Opportunities Management
 
-2.1. Users should be given a list of activities (opportunities) which will be displayed 
-2.2. Within the activity page, it should contain:
-- Activity details (title, description, category, datetime, location)
-- Registration page with autofilled user information
-- List of profiles who are interested in the same activity
-- Option to provide their buddy UID which will be shown in their buddy relationships 
+- 2.1. Users should be given a list of activities (opportunities) which will be displayed 
+- 2.2. Within the activity page, it should contain:
+	- Activity details (title, description, category, datetime, location)
+	- Registration page with autofilled user information
+	- List of profiles who are interested in the same activity
+	- Option to provide their buddy UID which will be shown in their buddy relationships 
 
-2.3. Staff accounts can create, update, and delete opportunities 
-2.4. Activities should support:
-- Age and mobility requirements
-- Required items list
-- Current participant count tracking
-- Incentive information (type, value, description) 
-2.5. Users can view all active opportunities without authentication, but must be authenticated to register
+- 2.3. Staff accounts can create, update, and delete opportunities 
+- 2.4. Activities should support:
+	- Age and mobility requirements
+	- Required items list
+	- Current participant count tracking
+	- Incentive information (type, value, description) 
+- 2.5. Users can view all active opportunities without authentication, but must be authenticated to register
 ### Registration System
 
-3.1. Authenticated users can register for activities 
-3.2. Registration form should autofill user information from their profile 
-3.3. Users can specify a buddy (by UID) when registering 
-3.4. Registration should capture:
-
-- Special requirements
-- Emergency contact (can override profile defaults)
-- Status tracking (registered, confirmed, attended, cancelled, no-show) 3.5. Users can update their registration status 3.6. Prevent duplicate registrations for the same activity 3.7. Post-activity feedback system (rating and comments)
+- 3.1. Authenticated users can register for activities 
+- 3.2. Registration form should autofill user information from their profile 
+- 3.3. Users can specify a buddy (by UID) when registering 
+- 3.4. Registration should capture:
+	- Special requirements
+	- Emergency contact (can override profile defaults)
+	- Status tracking (registered, confirmed, attended, cancelled, no-show) 
+- 3.5. Users can update their registration status 
+- 3.6. Prevent duplicate registrations for the same activity 
+- 3.7. Post-activity feedback system (rating and comments)
 ### Buddy Relationship System
 
-4.1. Authenticated users can create, view, and update buddy relationships 
-4.2. Buddy relationship features:
-- Send buddy requests with different relationship types (buddy, activity-partner, mentor, friend)
-- Accept, decline, or block buddy requests
-- Track how relationships were initiated (swipe, activity, suggestion)
-- Monitor interaction history and activities done together 
+- 4.1. Authenticated users can create, view, and update buddy relationships 
+- 4.2. Buddy relationship features:
+	- Send buddy requests with different relationship types (buddy, activity-partner, mentor, friend)
+	- Accept, decline, or block buddy requests
+	- Track how relationships were initiated (swipe, activity, suggestion)
+	- Monitor interaction history and activities done together 
 
-4.3. Swiping mechanism:
-- Users can swipe "yes" or "no" on other profiles
-- Prevent multiple swipes on the same profile
-- Track swipe history for matching algorithm 4.4. Mutual matching system when both users swipe "yes" on each other
+- 4.3. Swiping mechanism:
+	- Users can swipe "yes" or "no" on other profiles
+	- Prevent multiple swipes on the same profile
+	- Track swipe history for matching algorithm 
+- 4.4. Mutual matching system when both users swipe "yes" on each other
 ### Incentives Management
 
-5.1. Staff accounts can create, update, and delete incentives 
-5.2. Incentives should have:
-- Description of the reward
-- Point values 
-5.3. Link incentives to opportunities and registrations 
-5.4. Track incentive claiming status and timestamps 5.5. 
-Users can view available incentives
+- 5.1. Staff accounts can create, update, and delete incentives 
+- 5.2. Incentives should have:
+	- Description of the reward
+	- Point values 
+- 5.3. Link incentives to opportunities and registrations 
+- 5.4. Track incentive claiming status and timestamps 
+- 5.5. Users can view available incentives
 ### Accessibility Features
 
-6.1. Text-to-Speech (TTS) functionality for authenticated users 
-6.2. Speech-to-Text (STT) functionality for authenticated users 
-6.3. Support for multiple language preferences 
-6.4. Mobility level considerations in activity matching 
-6.5. Large, clear UI elements suitable for elderly users
+- 6.1. Text-to-Speech (TTS) functionality for authenticated users 
+- 6.2. Speech-to-Text (STT) functionality for authenticated users 
+- 6.3. Support for multiple language preferences 
+- 6.4. Mobility level considerations in activity matching 
+- 6.5. Large, clear UI elements suitable for elderly users
 ## 7. Security & Permissions
 
-7.1. Authentication required for all Create, Update, Delete operations 
-7.2. Staff-only permissions for:
-- Managing opportunities (Create, Update, Delete)
-- Managing incentives (Create, Update, Delete) 
-7.3. User-specific permissions for:
-- Own profile management
-- Registration management
-- Buddy relationship management 
-7.4. Public read access for viewing opportunities and basic profile information
+- 7.1. Authentication required for all Create, Update, Delete operations 
+- 7.2. Staff-only permissions for:
+	- Managing opportunities (Create, Update, Delete)
+	- Managing incentives (Create, Update, Delete) 
+- 7.3. User-specific permissions for:
+	- Own profile management
+	- Registration management
+	- Buddy relationship management 
+- 7.4. Public read access for viewing opportunities and basic profile information
 
 ## 8. Data Management & Tracking
 
-8.1. Automatic timestamp tracking for all records (created_at, updated_at) 
-8.2. Activity participation tracking and statistics 
-8.3. User engagement metrics (last active time, total activities) 
-8.4. Soft delete capabilities with is_active flags 
-8.5. Emergency contact override options for activities 
-8.6. Profile verification status tracking
+- 8.1. Automatic timestamp tracking for all records (created_at, updated_at) 
+- 8.2. Activity participation tracking and statistics 
+- 8.3. User engagement metrics (last active time, total activities) 
+- 8.4. Soft delete capabilities with is_active flags 
+- 8.5. Emergency contact override options for activities 
+- 8.6. Profile verification status tracking
 
 # System Architecture
 ![[system arch.png]]
