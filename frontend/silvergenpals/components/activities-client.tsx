@@ -16,6 +16,9 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [isJoining, setIsJoining] = useState<number | null>(null);
   const [isDeregistering, setIsDeregistering] = useState<number | null>(null);
+  const [showBuddyModal, setShowBuddyModal] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
+  const [buddyName, setBuddyName] = useState('');
   const supabase = createClient();
 
   // Mock data for demo purposes - in a real app, this would come from the database
@@ -33,7 +36,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       difficulty: "Beginner",
       points: 15,
       image: "🧘‍♀️",
-      isRegistered: true
+      isRegistered: true,
+      buddyName: null as string | null
     },
     {
       id: 2,
@@ -48,7 +52,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       difficulty: "All Levels",
       points: 20,
       image: "🎨",
-      isRegistered: false
+      isRegistered: false,
+      buddyName: null as string | null
     },
     {
       id: 3,
@@ -63,7 +68,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       difficulty: "All Levels",
       points: 10,
       image: "📚",
-      isRegistered: false
+      isRegistered: false,
+      buddyName: null as string | null
     },
     {
       id: 4,
@@ -77,7 +83,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       maxParticipants: 8,
       difficulty: "Intermediate",
       points: 25,
-      image: "👨‍🍳"
+      image: "👨‍🍳",
+      buddyName: null as string | null
     },
     {
       id: 5,
@@ -91,7 +98,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       maxParticipants: 10,
       difficulty: "All Levels",
       points: 15,
-      image: "📸"
+      image: "📸",
+      buddyName: null as string | null
     },
     {
       id: 6,
@@ -105,7 +113,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
       maxParticipants: 15,
       difficulty: "All Levels",
       points: 18,
-      image: "🎵"
+      image: "🎵",
+      buddyName: null as string | null
     }
   ];
 
@@ -141,7 +150,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
     try {
       const { data: registrations, error } = await supabase
         .from('registrations')
-        .select('activity_id')
+        .select('activity_id, buddy')
         .eq('profile_id', userId)
         .eq('status', 'registered');
 
@@ -150,20 +159,32 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
         return;
       }
 
-      // Create a set of registered activity UUIDs for quick lookup
-      const registeredActivityUUIDs = new Set(
-        registrations?.map(reg => reg.activity_id) || []
-      );
+      // Create a map of registered activity UUIDs to their buddy information
+      const registrationMap = new Map();
+      registrations?.forEach(reg => {
+        // Extract buddy name from the database
+        let buddyName = null;
+        if (reg.buddy && typeof reg.buddy === 'string' && reg.buddy.trim() !== '') {
+          buddyName = reg.buddy.trim();
+        }
+        
+        registrationMap.set(reg.activity_id, {
+          isRegistered: true,
+          buddyName: buddyName
+        });
+      });
 
-      // Update activities to reflect actual registration status
+      // Update activities to reflect actual registration status and buddy info
       setActivities(prevActivities => 
         prevActivities.map(activity => {
           const activityUUID = activityUUIDMap[activity.id];
-          const isRegistered = registeredActivityUUIDs.has(activityUUID);
+          const registrationInfo = registrationMap.get(activityUUID);
+          
           
           return {
             ...activity,
-            isRegistered
+            isRegistered: registrationInfo?.isRegistered || false,
+            buddyName: registrationInfo?.buddyName || null
           };
         })
       );
@@ -174,7 +195,27 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
     }
   };
 
-  const handleJoinActivity = async (activityId: number) => {
+  const showBuddyNameModal = (activityId: number) => {
+    setSelectedActivityId(activityId);
+    setBuddyName('');
+    setShowBuddyModal(true);
+  };
+
+  const handleConfirmRegistration = async () => {
+    if (selectedActivityId === null) return;
+    
+    const processedBuddyName = buddyName.trim() || null;
+    setShowBuddyModal(false);
+    await handleJoinActivity(selectedActivityId, processedBuddyName);
+  };
+
+  const handleCancelRegistration = () => {
+    setShowBuddyModal(false);
+    setSelectedActivityId(null);
+    setBuddyName('');
+  };
+
+  const handleJoinActivity = async (activityId: number, buddyNameParam: string | null = null) => {
     setIsJoining(activityId);
     
     try {
@@ -226,26 +267,35 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
         setActivities(prevActivities => 
           prevActivities.map(activity => 
             activity.id === activityId 
-              ? { ...activity, isRegistered: true }
+              ? { ...activity, isRegistered: true, buddyName: null }
               : activity
           )
         );
         throw new Error('You are already registered for this activity.');
       }
 
-      // Insert the registration with only required fields first
+      // Insert the registration with buddy name if provided
+      const registrationData: any = {
+        profile_id: userId,
+        activity_id: activityUUID,
+        status: 'registered'
+      };
+
+      // Add buddy name if provided - store in the new 'buddy' column
+      if (buddyNameParam && buddyNameParam.trim() !== '') {
+        registrationData.buddy = buddyNameParam.trim();
+      }
+
       const { data, error } = await supabase
         .from('registrations')
-        .insert([{
-          profile_id: userId,
-          activity_id: activityUUID,
-          status: 'registered'
-        }])
+        .insert([registrationData])
         .select();
 
       if (error) {
+        console.error('Registration insert error:', error);
         throw error;
       }
+
 
       // Update the local state to reflect the registration
       setActivities(prevActivities => 
@@ -254,14 +304,17 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             ? { 
                 ...activity, 
                 isRegistered: true,
-                participants: activity.participants + 1
+                participants: activity.participants + 1,
+                buddyName: (buddyNameParam && buddyNameParam.trim() !== '') ? buddyNameParam.trim() : null
               }
             : activity
         )
       );
 
-      // Optionally refresh registrations to ensure consistency
-      // fetchUserRegistrations();
+      // Refresh registrations to ensure consistency with database
+      setTimeout(() => {
+        fetchUserRegistrations();
+      }, 500);
 
     } catch (error) {
       // More specific error messages
@@ -327,7 +380,8 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             ? { 
                 ...activity, 
                 isRegistered: false,
-                participants: Math.max(0, activity.participants - 1)
+                participants: Math.max(0, activity.participants - 1),
+                buddyName: null as string | null
               }
             : activity
         )
@@ -588,6 +642,10 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
                       <Users className="h-4 w-4 mr-2" />
                       {activity.participants}/{activity.maxParticipants} joined
                     </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Heart className="h-4 w-4 mr-2" />
+                      Buddy: {activity.buddyName || 'N/A'}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between mb-4">
@@ -685,7 +743,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
                     </button>
                   ) : (
                     <button 
-                      onClick={() => handleJoinActivity(activity.id)}
+                      onClick={() => showBuddyNameModal(activity.id)}
                       disabled={isJoining === activity.id}
                       className="flex-1 py-2 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
                     >
@@ -760,11 +818,11 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
                     </button>
                   ) : (
                     <button 
-                      onClick={() => handleJoinActivity(activity.id)}
+                      onClick={() => showBuddyNameModal(activity.id)}
                       disabled={isJoining === activity.id}
                       className="px-6 py-2 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
                     >
-                      {isJoining === activity.id ? 'Joining...' : 'Join'}
+                      {isJoining === activity.id ? 'Joining...' : 'Register'}
                     </button>
                   )}
                 </div>
@@ -773,6 +831,50 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
           </div>
         </div>
       </div>
+
+      {/* Buddy Name Modal */}
+      {showBuddyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Register for Activity
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Would you like to register with a buddy? (Optional)
+            </p>
+            
+            <div className="mb-6">
+              <label htmlFor="buddyName" className="block text-sm font-medium text-gray-700 mb-2">
+                Buddy's Name
+              </label>
+              <input
+                type="text"
+                id="buddyName"
+                value={buddyName}
+                onChange={(e) => setBuddyName(e.target.value)}
+                placeholder="Enter your buddy's name (optional)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={handleCancelRegistration}
+                className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRegistration}
+                disabled={isJoining !== null}
+                className="flex-1 py-2 px-4 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white rounded-lg font-medium transition-colors"
+              >
+                {isJoining !== null ? 'Registering...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
