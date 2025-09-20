@@ -1,0 +1,13 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.116.2",
+    "gtts>=2.5.1",
+    "openai-whisper>=20231117",
+    "python-multipart>=0.0.9",
+    "aiofiles>=24.1.0",
+]
