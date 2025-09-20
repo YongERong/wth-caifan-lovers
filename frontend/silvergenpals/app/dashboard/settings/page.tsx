@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard-layout";
-import { User, Bell, Shield, Accessibility, Globe, Heart, Save } from "lucide-react";
+import VoiceInput from "@/components/voice-input";
+import { User, Bell, Shield, Accessibility, Globe, Heart, Save, Mic } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -12,6 +13,9 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [currentInterest, setCurrentInterest] = useState("");
+  const [currentActivityPref, setCurrentActivityPref] = useState("");
+  const [currentLanguage, setCurrentLanguage] = useState("");
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -93,6 +97,50 @@ export default function SettingsPage() {
     }));
   };
 
+  const addToArray = (field: string, value: string) => {
+    if (value.trim() && !formData[field as keyof typeof formData].includes(value.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: [...prev[field as keyof typeof formData] as string[], value.trim()]
+      }));
+    }
+  };
+
+  const removeFromArray = (field: string, valueToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: (prev[field as keyof typeof formData] as string[]).filter(item => item !== valueToRemove)
+    }));
+  };
+
+  const handleVoiceTranscription = (text: string, fieldMappings: Record<string, string>) => {
+    console.log('Voice transcription:', text);
+    console.log('Field mappings:', fieldMappings);
+
+    // Update form data with extracted fields
+    setFormData(prev => {
+      const updated = { ...prev };
+
+      Object.entries(fieldMappings).forEach(([field, value]) => {
+        if (field === 'interests' || field === 'activity_preferences' || field === 'language_preferences') {
+          try {
+            const parsedArray = JSON.parse(value);
+            updated[field as keyof typeof updated] = parsedArray as never;
+          } catch (e) {
+            console.error('Error parsing array field:', field, value);
+          }
+        } else {
+          updated[field as keyof typeof updated] = value as never;
+        }
+      });
+
+      return updated;
+    });
+
+    // Show a success message
+    alert(`Voice input processed! Updated: ${Object.keys(fieldMappings).join(', ')}`);
+  };
+
   const handleSaveProfile = async () => {
     if (!user || !profile) return;
 
@@ -146,12 +194,43 @@ export default function SettingsPage() {
         {/* Profile Settings */}
         <div className="bg-white rounded-xl shadow-lg">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
-              <User className="h-6 w-6 text-pink-500" />
-              <h2 className="text-xl font-semibold text-gray-900">Profile Information</h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <User className="h-6 w-6 text-pink-500" />
+                <h2 className="text-xl font-semibold text-gray-900">Profile Information</h2>
+              </div>
+
+              {/* Voice Input */}
+              <div className="flex flex-col items-center space-y-2">
+                <VoiceInput
+                  onTranscription={handleVoiceTranscription}
+                  disabled={saving || !profile}
+                  className="text-pink-500"
+                />
+                <div className="text-center">
+                  <p className="text-gray-700 text-sm font-medium">Voice Update</p>
+                  <p className="text-gray-500 text-xs">Speak to auto-fill</p>
+                </div>
+              </div>
             </div>
           </div>
           <div className="p-6">
+            {/* Voice Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start space-x-3">
+                <Mic className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-blue-900">Voice Input Instructions</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Use the voice button above to automatically update your profile. Try saying something like:
+                  </p>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    "Update my phone number to 1234567890, my address is 456 Oak Street, I enjoy photography and hiking"
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
@@ -297,12 +376,7 @@ export default function SettingsPage() {
                     {interest}
                     <button
                       type="button"
-                      onClick={() => {
-                        setFormData(prev => ({
-                          ...prev,
-                          interests: prev.interests.filter((_, i) => i !== index)
-                        }));
-                      }}
+                      onClick={() => removeFromArray('interests', interest)}
                       className="ml-2 text-pink-600 hover:text-pink-800"
                     >
                       ×
@@ -310,9 +384,128 @@ export default function SettingsPage() {
                   </span>
                 ))}
               </div>
-              <p className="text-sm text-gray-500">
-                Current interests: {formData.interests.length > 0 ? formData.interests.join(', ') : 'None'}
-              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={currentInterest}
+                  onChange={(e) => setCurrentInterest(e.target.value)}
+                  placeholder="Add an interest (e.g., reading, walking, cooking)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addToArray('interests', currentInterest);
+                      setCurrentInterest("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToArray('interests', currentInterest);
+                    setCurrentInterest("");
+                  }}
+                  className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Activity Preferences */}
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Activity Preferences</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.activity_preferences.map((pref, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                  >
+                    {pref}
+                    <button
+                      type="button"
+                      onClick={() => removeFromArray('activity_preferences', pref)}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={currentActivityPref}
+                  onChange={(e) => setCurrentActivityPref(e.target.value)}
+                  placeholder="Add activity preference (e.g., indoor, outdoor, social, quiet)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addToArray('activity_preferences', currentActivityPref);
+                      setCurrentActivityPref("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToArray('activity_preferences', currentActivityPref);
+                    setCurrentActivityPref("");
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Language Preferences */}
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Language Preferences</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.language_preferences.map((lang, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800"
+                  >
+                    {lang}
+                    <button
+                      type="button"
+                      onClick={() => removeFromArray('language_preferences', lang)}
+                      className="ml-2 text-green-600 hover:text-green-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={currentLanguage}
+                  onChange={(e) => setCurrentLanguage(e.target.value)}
+                  placeholder="Add language (e.g., English, Mandarin, Malay, Tamil)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addToArray('language_preferences', currentLanguage);
+                      setCurrentLanguage("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToArray('language_preferences', currentLanguage);
+                    setCurrentLanguage("");
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             <div className="mt-6">
