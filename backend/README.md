@@ -229,14 +229,11 @@ CREATE TABLE buddy_relationships (
 CREATE TABLE swipe_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
-    swiper_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    swiped_profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    swiper_id UUID NOT NULL REFERENCES profiles(id),
+    opportunity_id UUID NOT NULL REFERENCES opportunities(id),
     action VARCHAR(20) NOT NULL CHECK (action IN ('yes', 'no')),
     
     swiped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    UNIQUE(swiper_id, swiped_profile_id),
-    CHECK (swiper_id != swiped_profile_id
 );
 
 CREATE TABLE incentives (
