@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import ActivitySwipe from "@/components/activity-swipe";
+import { createClient } from "@/lib/supabase/client";
 import { Calendar, MapPin, Clock, Users, Star, Plus, Search, Filter, Heart, List, Shuffle, History, X } from "lucide-react";
 
 interface ActivitiesClientProps {
   userId: string;
 }
 
+type ViewMode = 'list' | 'swipe';
+
 export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
-  const [viewMode, setViewMode] = useState<'list' | 'swipe'>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [isJoining, setIsJoining] = useState<number | null>(null);
+  const [isDeregistering, setIsDeregistering] = useState<number | null>(null);
+  const supabase = createClient();
 
   // Mock data for demo purposes - in a real app, this would come from the database
   const featuredActivities = [
@@ -103,7 +109,9 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
     }
   ];
 
-  const upcomingActivities = featuredActivities.slice(3); // Show last 3 as upcoming
+  const [activities, setActivities] = useState(featuredActivities);
+  const [isLoadingRegistrations, setIsLoadingRegistrations] = useState(true);
+  const upcomingActivities = activities.slice(3); // Show last 3 as upcoming
 
   const categories = [
     { name: "All", count: 24, active: true },
@@ -114,9 +122,239 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
     { name: "Wellness", count: 2, active: false }
   ];
 
+  // Map mock activity IDs to actual UUIDs (matching the pattern from activity-swipe.tsx)
+  const activityUUIDMap: { [key: number]: string } = {
+    1: '00000000-0000-0000-0000-000000000001',
+    2: '00000000-0000-0000-0000-000000000002',
+    3: '00000000-0000-0000-0000-000000000003',
+    4: '00000000-0000-0000-0000-000000000004',
+    5: '00000000-0000-0000-0000-000000000005',
+    6: '00000000-0000-0000-0000-000000000006'
+  };
+
+  // Fetch user's actual registrations on component mount
+  useEffect(() => {
+    fetchUserRegistrations();
+  }, [userId]);
+
+  const fetchUserRegistrations = async () => {
+    try {
+      const { data: registrations, error } = await supabase
+        .from('registrations')
+        .select('activity_id')
+        .eq('profile_id', userId)
+        .eq('status', 'registered');
+
+      if (error) {
+        setIsLoadingRegistrations(false);
+        return;
+      }
+
+      // Create a set of registered activity UUIDs for quick lookup
+      const registeredActivityUUIDs = new Set(
+        registrations?.map(reg => reg.activity_id) || []
+      );
+
+      // Update activities to reflect actual registration status
+      setActivities(prevActivities => 
+        prevActivities.map(activity => {
+          const activityUUID = activityUUIDMap[activity.id];
+          const isRegistered = registeredActivityUUIDs.has(activityUUID);
+          
+          return {
+            ...activity,
+            isRegistered
+          };
+        })
+      );
+
+      setIsLoadingRegistrations(false);
+    } catch (error) {
+      setIsLoadingRegistrations(false);
+    }
+  };
+
+  const handleJoinActivity = async (activityId: number) => {
+    setIsJoining(activityId);
+    
+    try {
+      const activityUUID = activityUUIDMap[activityId];
+      
+      if (!activityUUID) {
+        throw new Error(`No UUID mapping found for activity ID: ${activityId}`);
+      }
+
+      // First, check if the user profile exists
+      const { data: profileCheck, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId);
+
+      if (profileError) {
+        throw new Error('Failed to verify user profile. Please refresh the page and try again.');
+      }
+
+      if (!profileCheck || profileCheck.length === 0) {
+        throw new Error('User profile not found. Please refresh the page and try again.');
+      }
+
+      // Check if the activity exists in the database
+      const { data: activityCheck, error: activityError } = await supabase
+        .from('activities')
+        .select('id')
+        .eq('id', activityUUID);
+
+      if (activityError) {
+        // If activities table doesn't exist, we'll continue and let the foreign key constraint catch it
+      } else if (!activityCheck || activityCheck.length === 0) {
+        throw new Error('This activity is not available in the database. Please contact support.');
+      }
+
+      // Check if already registered
+      const { data: existingRegistration, error: checkError } = await supabase
+        .from('registrations')
+        .select('id')
+        .eq('profile_id', userId)
+        .eq('activity_id', activityUUID);
+
+      if (checkError) {
+        throw checkError;
+      }
+
+      if (existingRegistration && existingRegistration.length > 0) {
+        // If we find an existing registration, update the local state to reflect this
+        setActivities(prevActivities => 
+          prevActivities.map(activity => 
+            activity.id === activityId 
+              ? { ...activity, isRegistered: true }
+              : activity
+          )
+        );
+        throw new Error('You are already registered for this activity.');
+      }
+
+      // Insert the registration with only required fields first
+      const { data, error } = await supabase
+        .from('registrations')
+        .insert([{
+          profile_id: userId,
+          activity_id: activityUUID,
+          status: 'registered'
+        }])
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      // Update the local state to reflect the registration
+      setActivities(prevActivities => 
+        prevActivities.map(activity => 
+          activity.id === activityId 
+            ? { 
+                ...activity, 
+                isRegistered: true,
+                participants: activity.participants + 1
+              }
+            : activity
+        )
+      );
+
+      // Optionally refresh registrations to ensure consistency
+      // fetchUserRegistrations();
+
+    } catch (error) {
+      // More specific error messages
+      let errorMessage = 'Failed to join activity. Please try again.';
+      if (error instanceof Error) {
+        // Use the error message if it's one of our custom messages
+        if (error.message.includes('already registered')) {
+          // For "already registered" error, the UI should now show the correct state
+          errorMessage = 'This activity is now showing as registered in your list.';
+        } else if (error.message.includes('profile not found') ||
+            error.message.includes('verify user profile') ||
+            error.message.includes('not available in the database')) {
+          errorMessage = error.message;
+        } else if (error.message.includes('duplicate key') || error.message.includes('unique')) {
+          errorMessage = 'You are already registered for this activity.';
+        } else if (error.message.includes('foreign key') || error.message.includes('violates')) {
+          errorMessage = 'Activity not found. Please refresh the page and try again.';
+        } else if (error.message.includes('permission') || error.message.includes('denied')) {
+          errorMessage = 'Permission denied. Please log in again and try again.';
+        }
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setIsJoining(null);
+    }
+  };
+
+  const handleDeregister = async (activityId: number) => {
+    const activity = activities.find(a => a.id === activityId);
+    const confirmed = window.confirm(
+      `Are you sure you want to deregister from "${activity?.title}"?\n\nThis action cannot be undone.`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeregistering(activityId);
+    
+    try {
+      const activityUUID = activityUUIDMap[activityId];
+      
+      if (!activityUUID) {
+        throw new Error(`No UUID mapping found for activity ID: ${activityId}`);
+      }
+
+      // Delete the registration from the database
+      const { error } = await supabase
+        .from('registrations')
+        .delete()
+        .eq('profile_id', userId)
+        .eq('activity_id', activityUUID);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update the local state to reflect the deregistration
+      setActivities(prevActivities => 
+        prevActivities.map(activity => 
+          activity.id === activityId 
+            ? { 
+                ...activity, 
+                isRegistered: false,
+                participants: Math.max(0, activity.participants - 1)
+              }
+            : activity
+        )
+      );
+
+      // Optionally refresh registrations to ensure consistency
+      // fetchUserRegistrations();
+
+    } catch (error) {
+      // More specific error messages
+      let errorMessage = 'Failed to deregister from activity. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('not found') || error.message.includes('No rows')) {
+          errorMessage = 'Registration not found. You may have already been deregistered.';
+        } else if (error.message.includes('permission') || error.message.includes('denied')) {
+          errorMessage = 'Permission denied. Please log in again and try again.';
+        }
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setIsDeregistering(null);
+    }
+  };
+
   const handleSwipeHistoryUpdate = () => {
     // This could trigger a refresh of statistics or other UI updates
-    console.log('Swipe history updated');
   };
 
   if (viewMode === 'swipe') {
@@ -141,11 +379,11 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('list')}
-                className={`flex items-center px-3 py-2 rounded-md font-medium transition-colors ${
-                  viewMode === 'list'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+              className={`flex items-center px-3 py-2 rounded-md font-medium transition-colors ${
+                viewMode === ('list' as ViewMode)
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
               >
                 <List className="mr-2 h-4 w-4" />
                 List
@@ -153,7 +391,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
               <button
                 onClick={() => setViewMode('swipe')}
                 className={`flex items-center px-3 py-2 rounded-md font-medium transition-colors ${
-                  viewMode === 'swipe'
+                  viewMode === ('swipe' as ViewMode)
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -174,7 +412,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             </div>
 
             <ActivitySwipe
-              activities={featuredActivities}
+              activities={activities}
               userId={userId}
               onSwipeHistoryUpdate={handleSwipeHistoryUpdate}
             />
@@ -228,7 +466,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             <button
               onClick={() => setViewMode('list')}
               className={`flex items-center px-3 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'list'
+                viewMode === ('list' as ViewMode)
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
@@ -239,7 +477,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             <button
               onClick={() => setViewMode('swipe')}
               className={`flex items-center px-3 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'swipe'
+                viewMode === ('swipe' as ViewMode)
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
@@ -249,10 +487,6 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
             </button>
           </div>
 
-          <button className="flex items-center px-6 py-3 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition-colors">
-            <Plus className="mr-2 h-5 w-5" />
-            Suggest Activity
-          </button>
         </div>
       </div>
 
@@ -290,6 +524,100 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
         </div>
       </div>
 
+      {/* My Registered Activities */}
+      {isLoadingRegistrations ? (
+        <div className="bg-white rounded-xl shadow-lg">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">My Registered Activities</h2>
+            <p className="text-gray-600 text-sm mt-1">Loading your registered activities...</p>
+          </div>
+          <div className="p-6">
+            <div className="animate-pulse">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-gray-200 rounded-xl h-64"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : activities.filter(activity => activity.isRegistered).length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">My Registered Activities</h2>
+            <p className="text-gray-600 text-sm mt-1">Activities you've signed up for</p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {activities.filter(activity => activity.isRegistered).map((activity) => (
+                <div key={activity.id} className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 hover:shadow-md transition-shadow border border-green-200">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="text-4xl mb-2">{activity.image}</div>
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                        Registered
+                      </span>
+                      <div className="flex items-center text-yellow-500">
+                        <Star className="h-4 w-4 fill-current" />
+                        <span className="text-sm font-medium ml-1">{activity.points}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h3 className="font-semibold text-gray-900 mb-2">{activity.title}</h3>
+                  <p className="text-sm text-gray-600 mb-4 line-clamp-2">{activity.description}</p>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      {new Date(activity.date).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Clock className="h-4 w-4 mr-2" />
+                      {activity.time}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      {activity.location}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Users className="h-4 w-4 mr-2" />
+                      {activity.participants}/{activity.maxParticipants} joined
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                      {activity.category}
+                    </span>
+                    <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+                      {activity.difficulty}
+                    </span>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <button 
+                      onClick={() => handleDeregister(activity.id)}
+                      disabled={isDeregistering === activity.id}
+                      className="flex-1 py-2 bg-red-100 hover:bg-red-200 disabled:bg-red-50 disabled:cursor-not-allowed text-red-700 rounded-lg font-medium transition-colors"
+                    >
+                      {isDeregistering === activity.id ? 'Deregistering...' : 'Deregister'}
+                    </button>
+                    <button className="p-2 border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors">
+                      <Heart className="h-5 w-5 text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Featured Activities */}
       <div className="bg-white rounded-xl shadow-lg">
         <div className="p-6 border-b border-gray-200">
@@ -298,7 +626,7 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
         </div>
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {featuredActivities.slice(0, 3).map((activity) => (
+            {activities.slice(0, 3).map((activity) => (
               <div key={activity.id} className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
                   <div className="text-4xl mb-2">{activity.image}</div>
@@ -356,8 +684,12 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
                       Registered
                     </button>
                   ) : (
-                    <button className="flex-1 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition-colors">
-                      Join Activity
+                    <button 
+                      onClick={() => handleJoinActivity(activity.id)}
+                      disabled={isJoining === activity.id}
+                      className="flex-1 py-2 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                    >
+                      {isJoining === activity.id ? 'Joining...' : 'Join Activity'}
                     </button>
                   )}
                   <button className="p-2 border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors">
@@ -422,9 +754,19 @@ export default function ActivitiesClient({ userId }: ActivitiesClientProps) {
                   <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
                     {activity.category}
                   </span>
-                  <button className="px-6 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition-colors">
-                    Join
-                  </button>
+                  {activity.isRegistered ? (
+                    <button className="px-6 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium">
+                      Registered
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleJoinActivity(activity.id)}
+                      disabled={isJoining === activity.id}
+                      className="px-6 py-2 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                    >
+                      {isJoining === activity.id ? 'Joining...' : 'Join'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
