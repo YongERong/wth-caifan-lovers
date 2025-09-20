@@ -145,7 +145,7 @@ CREATE TABLE profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE opportunities (
+CREATE TABLE activities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     title VARCHAR(200) NOT NULL,
