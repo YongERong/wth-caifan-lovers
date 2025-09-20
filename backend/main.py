@@ -7,9 +7,16 @@ from fastapi.responses import FileResponse
 from gtts import gTTS
 from pydantic import BaseModel
 import aiofiles
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["http://localhost:3000"],  # Your Next.js frontend URL
+  allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
 whisper_model = whisper.load_model("base")
 
 class TextToSpeechRequest(BaseModel):

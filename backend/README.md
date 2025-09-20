@@ -117,6 +117,7 @@ CREATE TABLE profiles (
     phone_number VARCHAR(20),
     date_of_birth DATE NOT NULL,
     gender VARCHAR(20) CHECK (gender IN ('male', 'female', 'non-binary', 'prefer-not-to-say')),
+    age INTEGER,
     
     address_line1 VARCHAR(255),
     address_line2 VARCHAR(255),
