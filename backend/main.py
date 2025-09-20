@@ -63,7 +63,7 @@ async def speech_to_text(file: UploadFile = File(...)):
                 content = await file.read()
                 await f.write(content)
 
-            result = whisper_model.transcribe(temp_file.name)
+            result = whisper_model.transcribe(temp_file.name, fp16=False) # disable fp16, running on cpu
             transcription = result["text"].strip()
 
             os.unlink(temp_file.name)
