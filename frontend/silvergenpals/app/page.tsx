@@ -21,7 +21,13 @@ export default async function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
-              <Heart className="h-8 w-8 text-pink-500" />
+              <img 
+                src="/silvergen.png" 
+                alt="SilverGenPals Logo" 
+                width={32} 
+                height={32}
+                className="object-contain"
+              />
               <h1 className="text-2xl font-bold text-gray-900">SilverGenPals</h1>
             </div>
             <div className="flex items-center space-x-4">

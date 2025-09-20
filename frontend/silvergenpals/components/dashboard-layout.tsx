@@ -87,10 +87,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <div className="flex items-center space-x-2">
-              <Heart className="h-8 w-8 text-pink-500" />
-              <span className="text-xl font-bold text-gray-900">SilverGenPals</span>
-            </div>
+              <div className="flex items-center space-x-2">
+                <img 
+                  src="/silvergen.png" 
+                  alt="SilverGenPals Logo" 
+                  width={32} 
+                  height={32}
+                  className="object-contain"
+                />
+                <span className="text-xl font-bold text-gray-900">SilverGenPals</span>
+              </div>
             <button
               onClick={() => setSidebarOpen(false)}
               className="p-2 rounded-md text-gray-400 hover:text-gray-600"
