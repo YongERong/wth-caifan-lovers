@@ -1,37 +1,48 @@
 /*
-  Arduino Uno WiFi Rev2 – Motion-Triggered Event LED Blink
+  Arduino Uno WiFi Rev2 – Motion-Triggered LED and Buzzer Based on Supabase Activities
 
   Description:
-  This sketch connects the Arduino Uno WiFi Rev2 to WiFi and fetches event data
-  from a Supabase table named 'events'. It uses the onboard IMU accelerometer to detect motion.
+  This sketch connects the Arduino Uno WiFi Rev2 to a WiFi network and fetches
+  event/activity data from a Supabase database. It uses the onboard IMU 
+  accelerometer to detect motion and triggers an external LED and buzzer 
+  when motion is detected.
 
   Behavior:
-  1. When the Arduino is moved (detected via accelerometer), it makes a GET request
-     to Supabase to fetch the number of events scheduled for the current day.
-  2. The onboard LED (LED_BUILTIN) blinks a number of times equal to the number 
-     of events for that day.
-  3. The LED blinks only once per motion event. If the Arduino remains stationary,
-     no blinking occurs until it is moved again.
-  4. Motion state is tracked so that repeated blinking does not happen while the 
-     Arduino is continuously moving.
+  1. The Arduino detects motion using the onboard accelerometer.
+  2. On detecting **new motion**, it fetches all registrations for a specified 
+     profile ID from the Supabase `registrations` table.
+  3. It extracts the `activity_id`s from the registrations and then fetches the 
+     corresponding activities from the `activities` table **scheduled for the hardcoded date**.
+  4. The number of activities for that day determines how many times the external 
+     LED (pin 13) blinks and the buzzer (pin 12 buzzes in sync).
+  5. The LED and buzzer trigger **only once per motion event**. If the Arduino 
+     remains stationary, no blinking/buzzing occurs until it is moved again.
 
-  Requirements:
+  Hardware Requirements:
+  - Arduino Uno WiFi Rev2
+  - External LED connected to pin 13 with a 220–330Ω resistor to GND
+  - Buzzer connected to pin 12 to GND
+
+  Software Requirements:
   - WiFiNINA library
   - ArduinoHttpClient library
   - Arduino_LSM6DS3 library
-  - Supabase project with an 'events' table containing 'id', 'event_name', and 'event_date' fields.
+  - ArduinoJson library (for parsing JSON responses)
 
   Notes:
-  - The date is currently hardcoded for testing; it can be replaced with a real-time
-    clock (RTC) or NTP to automatically fetch the current date.
-  - 'event' table was created on a separate database for testing purposes. 
-    Not sure which table to reference to.
+  - The date for fetching activities is currently **hardcoded**. It can be 
+    replaced with NTP/RTC logic for dynamic daily updates.
+  - The profile ID is specified in the code (`profileID`) for fetching user-specific 
+    registrations.
+  - The sketch communicates securely with Supabase using HTTPS.
 */
+
 
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <ArduinoHttpClient.h>
-#include <Arduino_LSM6DS3.h> // IMU library
+#include <Arduino_LSM6DS3.h>
+#include <ArduinoJson.h>
 
 // WiFi credentials
 char ssid[] = "YOUR_WIFI_SSID";
@@ -40,16 +51,22 @@ char pass[] = "YOUR_WIFI_PASSWORD";
 // Supabase credentials
 char supabase_url[] = "YOUR_PROJECT_ID.supabase.co";  
 char supabase_key[] = "YOUR_SUPABASE_ANON_KEY";  
-int port = 443; // HTTPS
+int port = 443;
+
+// User profile ID (dynamic)
+char profileID[] = "28307ee2-ddc7-4395-a621-cfb7f85a50e1";
 
 WiFiSSLClient wifi;
 HttpClient client = HttpClient(wifi, supabase_url, port);
 
-const int ledPin = LED_BUILTIN;
-bool wasMoved = false; // tracks previous motion state
+// External devices
+const int ledPin = 13;    // external LED
+const int buzzerPin = 12; // buzzer
+bool wasMoved = false;
 
 void setup() {
   pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
   Serial.begin(9600);
 
   // Connect to WiFi
@@ -79,45 +96,76 @@ void loop() {
     }
   }
 
-  // Trigger LED only on **new motion**
+  // Trigger LED/buzzer only on new motion
   if (moved && !wasMoved) {
-    wasMoved = true;  // update state
+    wasMoved = true;
 
-    // Hardcoded date for testing; replace with NTP if desired
-    String today = "2025-09-20";
-
-    // Fetch events from Supabase
-    String url = "/rest/v1/events?select=id&event_date=eq." + today;
+    // --- Step 1: Fetch registrations for this profile ---
+    String regUrl = "/rest/v1/registrations?select=activity_id&profile_id=eq." + String(profileID);
     client.beginRequest();
-    client.get(url);
+    client.get(regUrl);
     client.sendHeader("apikey", supabase_key);
     client.sendHeader("Authorization", "Bearer " + String(supabase_key));
     client.sendHeader("Accept", "application/json");
     client.endRequest();
 
     int statusCode = client.responseStatusCode();
-    String response = client.responseBody();
-    Serial.print("Status: "); Serial.println(statusCode);
-    Serial.print("Response: "); Serial.println(response);
+    String regResponse = client.responseBody();
+    Serial.print("Registrations Status: "); Serial.println(statusCode);
+    Serial.print("Registrations Response: "); Serial.println(regResponse);
 
-    // Count events (number of JSON objects)
-    int blinkCount = 0;
-    for (unsigned int i = 0; i < response.length(); i++) {
-      if (response[i] == '{') blinkCount++;
+    // --- Step 2: Parse JSON to extract activity IDs ---
+    DynamicJsonDocument doc(512);
+    DeserializationError error = deserializeJson(doc, regResponse);
+    if (error) {
+      Serial.print("JSON parse error: ");
+      Serial.println(error.c_str());
+      return;
     }
-    Serial.print("Blinking LED "); Serial.print(blinkCount); Serial.println(" times");
 
-    // Blink LED
+    String ids = "";
+    for (JsonObject reg : doc.as<JsonArray>()) {
+      if (ids.length() > 0) ids += ",";
+      ids += "\"" + String((const char*)reg["activity_id"]) + "\""; // quote UUIDs
+    }
+
+    if (ids.length() == 0) return; // no registrations
+
+    // --- Step 3: Fetch activities for hardcoded date ---
+    String today = "2024-09-23"; // hardcoded date
+    String actUrl = "/rest/v1/activities?select=start_datetime&id=in.(" + ids + ")&start_datetime=gte." + today + "&start_datetime=lt." + today + "T23:59:59";
+
+    client.beginRequest();
+    client.get(actUrl);
+    client.sendHeader("apikey", supabase_key);
+    client.sendHeader("Authorization", "Bearer " + String(supabase_key));
+    client.sendHeader("Accept", "application/json");
+    client.endRequest();
+
+    int actStatus = client.responseStatusCode();
+    String actResponse = client.responseBody();
+    Serial.print("Activities Status: "); Serial.println(actStatus);
+    Serial.print("Activities Response: "); Serial.println(actResponse);
+
+    // --- Step 4: Count events and blink LED + buzzer ---
+    int blinkCount = 0;
+    for (unsigned int i = 0; i < actResponse.length(); i++) {
+      if (actResponse[i] == '{') blinkCount++;
+    }
+    Serial.print("Blinking LED and buzzing "); Serial.print(blinkCount); Serial.println(" times");
+
     for (int i = 0; i < blinkCount; i++) {
       digitalWrite(ledPin, HIGH);
+      digitalWrite(buzzerPin, HIGH);
       delay(300);
       digitalWrite(ledPin, LOW);
+      digitalWrite(buzzerPin, LOW);
       delay(300);
     }
   }
   else if (!moved) {
-    wasMoved = false; // reset state when motion stops
+    wasMoved = false;
   }
 
-  delay(100); // small delay to avoid too fast looping
+  delay(100);
 }
